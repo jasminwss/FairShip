@@ -694,14 +694,14 @@ void veto::add_block(TGeoVolumeAssembly* outer_wall,
       zi_x1 = zi_x1 - zi_x1_Step;
       zi_x2 = zi_x2 - zi_x2_Step;
 
-      longitudinal_rib->AddNode(
-          vLongitRibX.at(i), makeId(zi, zi_x1, zi_y1),
-          new TGeoCombiTrans((zi_x1 - rib_thickness), zi_y1, tZ,
-                             new TGeoRotation("r", 0, 0, 0)));
-      longitudinal_rib->AddNode(
-          vLongitRibX.at(i), makeId(zi, -zi_x1, -zi_y1),
-          new TGeoCombiTrans(-(zi_x1 - rib_thickness), -zi_y1, tZ,
-                             new TGeoRotation("r", 0, 0, 180)));
+      //longitudinal_rib->AddNode(
+        //  vLongitRibX.at(i), makeId(zi, zi_x1, zi_y1),
+          //new TGeoCombiTrans((zi_x1 - rib_thickness), zi_y1, tZ,
+            //                 new TGeoRotation("r", 0, 0, 0)));
+      //longitudinal_rib->AddNode(
+        //  vLongitRibX.at(i), makeId(zi, -zi_x1, -zi_y1),
+          //new TGeoCombiTrans(-(zi_x1 - rib_thickness), -zi_y1, tZ,
+            //                 new TGeoRotation("r", 0, 0, 180)));
 
       if (i > 0) {
         name = "";
