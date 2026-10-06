@@ -99,7 +99,6 @@ TGeoVolume* veto::GeoTrapezoidHollow(
     TString xname, Double_t wallthick, Double_t z_thick, Double_t x_thick_start,
     Double_t x_thick_end, Double_t y_thick_start, Double_t y_thick_end,
     Int_t color, TGeoMedium* material, Bool_t sens = kFALSE) {
-  
   Double_t dx_start = x_thick_start / 2;
   Double_t dy_start = y_thick_start / 2;
   Double_t dx_end = x_thick_end / 2;
@@ -200,7 +199,6 @@ TGeoVolume* veto::GeoTrapezoidSides(
   }
   return T;
 }
-
 
 double veto::wx(double z) {  // calculate x thickness at z
 

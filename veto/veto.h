@@ -167,8 +167,6 @@ class veto : public SHiP::Detector<vetoPoint> {
                                  Double_t wY_start, Double_t wY_end,
                                  Int_t color, TGeoMedium* material,
                                  Bool_t sens);
-
-
   /** Adds a custom block of OuterWall+LiSc+Support ribs for a given
    * distance along z. Ensures consistency in implementation throughout the z.
    */
