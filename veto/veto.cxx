@@ -99,6 +99,7 @@ TGeoVolume* veto::GeoTrapezoidHollow(
     TString xname, Double_t wallthick, Double_t z_thick, Double_t x_thick_start,
     Double_t x_thick_end, Double_t y_thick_start, Double_t y_thick_end,
     Int_t color, TGeoMedium* material, Bool_t sens = kFALSE) {
+  
   Double_t dx_start = x_thick_start / 2;
   Double_t dy_start = y_thick_start / 2;
   Double_t dx_end = x_thick_end / 2;
@@ -146,6 +147,60 @@ TGeoVolume* veto::GeoTrapezoidHollow(
   }
   return T;
 }
+
+TGeoVolume* veto::GeoTrapezoidSides(
+    TString xname, Double_t wallthick, Double_t z_thick, Double_t x_thick_start,
+    Double_t x_thick_end, Double_t y_thick_start, Double_t y_thick_end,
+    Int_t color, TGeoMedium* material, Bool_t sens = kFALSE) {
+  Double_t dx_start = x_thick_start / 2;
+  Double_t dy_start = y_thick_start / 2;
+  Double_t dx_end = x_thick_end / 2;
+  Double_t dy_end = y_thick_end / 2;
+  Double_t dz = z_thick / 2;
+
+  TString nm = xname.ReplaceAll(
+      "-", "");  // otherwise it will try to subtract "-" in TGeoComposteShape
+  Double_t dx1 = dx_start + wallthick;
+  Double_t dx2 = dx_end + wallthick;
+  Double_t dy1 = dy_start + wallthick;
+  Double_t dy2 = dy_end + wallthick;
+
+  TGeoArb8* T2 = new TGeoArb8("T2" + nm, dz);
+  T2->SetVertex(0, -dx1, -dy1);
+  T2->SetVertex(1, -dx1, dy1);
+  T2->SetVertex(2, dx1, dy1);
+  T2->SetVertex(3, dx1, -dy1);
+  T2->SetVertex(4, -dx2, -dy2);
+  T2->SetVertex(5, -dx2, dy2);
+  T2->SetVertex(6, dx2, dy2);
+  T2->SetVertex(7, dx2, -dy2);
+
+  // cut-out is higher in y than T2 -> removes top and bottom, keeps only +-x
+  Double_t tdx1 = dx_start;
+  Double_t tdx2 = dx_end;
+  Double_t tdy1 = 2 * dy1;
+  Double_t tdy2 = 2 * dy2;
+  TGeoArb8* T1 = new TGeoArb8("T1" + nm, dz + 1.E-6);
+  T1->SetVertex(0, -tdx1, -tdy1);
+  T1->SetVertex(1, -tdx1, tdy1);
+  T1->SetVertex(2, tdx1, tdy1);
+  T1->SetVertex(3, tdx1, -tdy1);
+  T1->SetVertex(4, -tdx2, -tdy2);
+  T1->SetVertex(5, -tdx2, tdy2);
+  T1->SetVertex(6, tdx2, tdy2);
+  T1->SetVertex(7, tdx2, -tdy2);
+
+  TGeoCompositeShape* T321 =
+      new TGeoCompositeShape("T3" + nm, "T2" + nm + "-T1" + nm);
+  TGeoVolume* T = new TGeoVolume(xname, T321, material);
+  T->SetLineColor(color);
+  // and make the volumes sensitive..
+  if (sens) {
+    AddSensitiveVolume(T);
+  }
+  return T;
+}
+
 
 double veto::wx(double z) {  // calculate x thickness at z
 
@@ -390,7 +445,7 @@ void veto::add_block(TGeoVolumeAssembly* outer_wall,
   /// outer wall
   TString nameOuterWall = (TString)outer_wall->GetName() + "_" + blockName;
   TGeoVolume* TOW =
-      GeoTrapezoidHollow(nameOuterWall, wall_thickness, wz,
+      GeoTrapezoidSides(nameOuterWall, wall_thickness, wz,
                          wx(z1) + 2 * (wall_thickness + lisc_thickness_start),
                          wx(z2) + 2 * (wall_thickness + lisc_thickness_end),
                          wy(z1) + 2 * (wall_thickness + lisc_thickness_start),
@@ -744,13 +799,16 @@ TGeoVolume* veto::make_segments() {
   const double z_start = 0 * m;
   const double z_end = 50 * m;
   const double balloon_thickness = f_he_balloon_thickness;
-  TGeoVolume* vessel = make_geo_trapezoid(
-      "VetoInnerWall", z_end - z_start, wx(z_start) + 2 * wall_thickness,
-      wx(z_end) + 2 * wall_thickness, wy(z_start) + 2 * wall_thickness,
-      wy(z_end) + 2 * wall_thickness, 15, supportMedIn);
+  TGeoVolume* inner_wall = GeoTrapezoidSides(
+      "VetoInnerWall", wall_thickness, z_end - z_start, wx(z_start), wx(z_end),
+      wy(z_start), wy(z_end), 15, supportMedIn);
+  tTankVol->AddNode(inner_wall, 0,
+                    new TGeoTranslation(0, 0, (z_start + z_end) / 2));
+
+  TGeoVolume* vessel = nullptr;  // balloon (or decay medium) without the wall
   TGeoVolume* decay_medium = nullptr;
   if (balloon_thickness > 0) {
-    TGeoVolume* liner =
+    vessel =
         make_geo_trapezoid("HeBalloon", z_end - z_start, wx(z_start), wx(z_end),
                            wy(z_start), wy(z_end), kGreen, f_he_balloon_med);
     decay_medium = make_geo_trapezoid(
@@ -760,13 +818,12 @@ TGeoVolume* veto::make_segments() {
         wy(z_start + balloon_thickness) - 2 * balloon_thickness,
         wy(z_end - balloon_thickness) - 2 * balloon_thickness, 1,
         decayVolumeMed);
-    liner->AddNode(decay_medium, 0);
-    vessel->AddNode(liner, 0);
+    vessel->AddNode(decay_medium, 0);
   } else {
     decay_medium = make_geo_trapezoid("decay_medium", z_end - z_start,
                                       wx(z_start), wx(z_end), wy(z_start),
                                       wy(z_end), 1, decayVolumeMed);
-    vessel->AddNode(decay_medium, 0);
+    vessel = decay_medium;
   }
   decay_medium->SetVisibility(kFALSE);
   tTankVol->AddNode(vessel, 0,

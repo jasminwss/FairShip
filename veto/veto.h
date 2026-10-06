@@ -161,6 +161,14 @@ class veto : public SHiP::Detector<vetoPoint> {
                                  Int_t color, TGeoMedium* material,
                                  Bool_t sens);
 
+  /** Like GeoTrapezoidHollow, but only the two side plates at +-x. */
+  TGeoVolume* GeoTrapezoidSides(TString xname, Double_t thick, Double_t wz,
+                                 Double_t wX_start, Double_t wX_end,
+                                 Double_t wY_start, Double_t wY_end,
+                                 Int_t color, TGeoMedium* material,
+                                 Bool_t sens);
+
+
   /** Adds a custom block of OuterWall+LiSc+Support ribs for a given
    * distance along z. Ensures consistency in implementation throughout the z.
    */
