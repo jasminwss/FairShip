@@ -612,7 +612,7 @@ void veto::add_block(TGeoVolumeAssembly* outer_wall,
         zi_x2_Step - lisc_thickness_end - rib_thickness / sqrt(2),
         lisc_thickness_start, lisc_thickness_end,
         zi_x2_Step - zi_x1_Step - rib_thickness / 2, zi_y2 - zi_y1,
-        kMagenta - 10, vetoMed, true);
+        kMagenta - 10, vetoMed, false);
     lisc->AddNode(LiSc_S3, liscId("LiSc_S3", block_number, Zlayer, 0, 1),
                   new TGeoCombiTrans(-(zi_x1 - zi_x1_Step), zi_y1, tZ,
                                      new TGeoRotation("r", 0, 0, 0)));
@@ -629,7 +629,7 @@ void veto::add_block(TGeoVolumeAssembly* outer_wall,
         zi_x2_Step - lisc_thickness_end - rib_thickness / sqrt(2),
         lisc_thickness_start, lisc_thickness_end,
         zi_x2_Step - zi_x1_Step - rib_thickness / 2, zi_y2 - zi_y1,
-        kMagenta - 10, vetoMed, true);
+        kMagenta - 10, vetoMed, false);
     lisc->AddNode(LiSc_S5, liscId("LiSc_S5", block_number, Zlayer, nx, 1),
                   new TGeoCombiTrans((zi_x1 - zi_x1_Step), zi_y1, tZ,
                                      new TGeoRotation("r", 0, 0, 0)));
@@ -656,7 +656,7 @@ void veto::add_block(TGeoVolumeAssembly* outer_wall,
         TGeoVolume* LiScX =
             GeoSideObj(name, dZ, zi_x1_Step, lisc_thickness_start, zi_x2_Step,
                        lisc_thickness_end, zi_x2 - zi_x1, zi_y2 - zi_y1,
-                       kMagenta - 10, vetoMed, true);
+                       kMagenta - 10, vetoMed, false);
         lisc->AddNode(LiScX, liscId("LiScX", block_number, Zlayer, i, 1),
                       new TGeoCombiTrans(zi_x1, zi_y1, tZ,
                                          new TGeoRotation("r", 0, 0, 0)));
