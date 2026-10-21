@@ -9,7 +9,6 @@ import logging
 import os
 
 import ROOT as r
-import rootUtils as ut
 from tabulate import tabulate
 
 logging.basicConfig(level=logging.DEBUG)
@@ -119,10 +118,12 @@ def modify_file(inputfile, muonfile) -> None:
     temp_file = r.TFile.Open(temp_filename, "recreate")
     output_tree = input_tree.CloneTree(0)  # Clone the structure of the existing tree, but do not copy the entries
 
-    combined_vetoPoint = r.TClonesArray("vetoPoint")
+    # The sim file stores points as std::vector<...> (not TClonesArray) in this
+    # FairShip version; binding a TClonesArray here segfaults in TTree::Fill.
+    combined_vetoPoint = r.std.vector("vetoPoint")()
     output_tree.SetBranchAddress("vetoPoint", combined_vetoPoint)
 
-    combined_UpstreamTaggerPoint = r.TClonesArray("UpstreamTaggerPoint")
+    combined_UpstreamTaggerPoint = r.std.vector("UpstreamTaggerPoint")()
     output_tree.SetBranchAddress("UpstreamTaggerPoint", combined_UpstreamTaggerPoint)
 
     table_data = []
@@ -131,34 +132,26 @@ def modify_file(inputfile, muonfile) -> None:
         interaction_point = r.TVector3()
         input_event.MCTrack[0].GetStartVertex(interaction_point)
 
-        combined_vetoPoint.Clear()
-
-        index = 0
+        combined_vetoPoint.clear()
 
         for hit in input_event.vetoPoint:
-            ut.assignClonesArrayItem(combined_vetoPoint, index, hit)
-            index += 1
+            combined_vetoPoint.push_back(hit)
 
         muoncount = 0
         for hit in muon_event.muon_vetoPoints:
             if hit.GetZ() < interaction_point.Z():
-                ut.assignClonesArrayItem(combined_vetoPoint, index, hit)
-                index += 1
+                combined_vetoPoint.push_back(hit)
                 muoncount += 1
 
-        combined_UpstreamTaggerPoint.Clear()
-
-        ubt_index = 0
+        combined_UpstreamTaggerPoint.clear()
 
         for hit in input_event.UpstreamTaggerPoint:
-            ut.assignClonesArrayItem(combined_UpstreamTaggerPoint, ubt_index, hit)
-            ubt_index += 1
+            combined_UpstreamTaggerPoint.push_back(hit)
 
         muon_ubtcount = 0
         for hit in muon_event.muon_UpstreamTaggerPoints:
             if hit.GetZ() < interaction_point.Z():
-                ut.assignClonesArrayItem(combined_UpstreamTaggerPoint, ubt_index, hit)
-                ubt_index += 1
+                combined_UpstreamTaggerPoint.push_back(hit)
                 muon_ubtcount += 1
 
         table_data.append(
