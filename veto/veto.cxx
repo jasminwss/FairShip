@@ -79,6 +79,18 @@ constexpr BeamProfile kIPE240{240 * mm, 16.3 * mm, kCyan + 2};
 constexpr BeamProfile kIPE270{270 * mm, 17.0 * mm, kOrange};
 constexpr BeamProfile kHEA260{250 * mm, 34.7 * mm, kMagenta};
 
+/// detector ID (= copy number) of a sensitive steel beam:
+/// type * 10000 + k * 100 + pos, i.e. 10001 ... 30904, below the LiSc IDs
+/// (>= 100000) so the SBT digitisation can skip them
+///   type 1: frame k = 0 ... 10, pos 1 side R, 2 side L, 3 top, 4 bottom
+///   type 2: longitudinal beam in segment k = 0 ... 9, pos 10 + j top,
+///           20 + j bottom
+///   type 3: corner beam in segment k = 0 ... 9, pos 1 top R, 2 top L,
+///           3 bottom R, 4 bottom L
+constexpr int steel_id(int type, size_t k, int pos) {
+  return type * 10000 + static_cast<int>(k) * 100 + pos;
+}
+
 /**
  * @brief Constructor for the Veto class.
  *
@@ -220,13 +232,17 @@ TGeoVolume* veto::make_segments() {
       name.Form("SteelFrameSide_F%02zu_%s", k, xsign > 0 ? "R" : "L");
       TGeoVolume* side = make_beam(name, kHEA260.h / 2, ay + kHEA260.h,
                                    kHEA260.t / 2, kHEA260.color, steelMed);
-      frames->AddNode(side, 1, new TGeoTranslation(xsign * xs, 0, zs));
+      AddSensitiveVolume(side);
+      frames->AddNode(side, steel_id(1, k, xsign > 0 ? 1 : 2),
+                      new TGeoTranslation(xsign * xs, 0, zs));
     }
     for (int ysign : {1, -1}) {
       name.Form("SteelFrame%s_F%02zu", ysign > 0 ? "Top" : "Bottom", k);
       TGeoVolume* topbottom = make_beam(name, ax, kIPE240.h / 2,
                                         kIPE240.t / 2, kIPE240.color, steelMed);
-      frames->AddNode(topbottom, 1, new TGeoTranslation(0, ysign * yt, zt));
+      AddSensitiveVolume(topbottom);
+      frames->AddNode(topbottom, steel_id(1, k, ysign > 0 ? 3 : 4),
+                      new TGeoTranslation(0, ysign * yt, zt));
     }
   }
 
@@ -241,18 +257,20 @@ TGeoVolume* veto::make_segments() {
   auto x_corner = [&](double z) {
     return wx(z) / 2 + wall_thickness + lisc_thickness / 2;
   };
-  // one tilted beam from zb1 to zb2; x1/x2 = x centre at zb1/zb2,
-  // ysign = +1 top, -1 bottom; inner edge at the former inner wall
+  // one tilted, sensitive beam from zb1 to zb2; x1/x2 = x centre at zb1/zb2,
+  // ysign = +1 top, -1 bottom; inner edge at the former inner wall;
+  // id = detector ID (copy number), see steel_id
   auto place_beam = [&](TGeoVolumeAssembly* assembly, const TString& nm,
                         const BeamProfile& p, double zb1, double zb2,
-                        double x1, double x2, int ysign) {
+                        double x1, double x2, int ysign, int id) {
     const double y1 = ysign * (wy(zb1) / 2 + wall_thickness + p.h / 2);
     const double y2 = ysign * (wy(zb2) / 2 + wall_thickness + p.h / 2);
     TGeoVolume* v = make_tilted_beam(nm, p.t / 2, p.h / 2, (zb2 - zb1) / 2,
                                      (x2 - x1) / 2, (y2 - y1) / 2, p.color,
                                      steelMed);
-    assembly->AddNode(v, 1, new TGeoTranslation((x1 + x2) / 2, (y1 + y2) / 2,
-                                                (zb1 + zb2) / 2));
+    AddSensitiveVolume(v);
+    assembly->AddNode(v, id, new TGeoTranslation((x1 + x2) / 2, (y1 + y2) / 2,
+                                                 (zb1 + zb2) / 2));
   };
 
   /// profiles per segment k (between frame k and k + 1, counted from 0)
@@ -275,14 +293,16 @@ TGeoVolume* veto::make_segments() {
       for (int j = 0; j < n_mid; ++j) {
         name.Form("SteelLongitBeam_S%02zu_%s_%d", k, tb, j);
         place_beam(longit_beams, name, middle_profile(k), zb1, zb2,
-                   x_longit(zb1, j, n_mid), x_longit(zb2, j, n_mid), ysign);
+                   x_longit(zb1, j, n_mid), x_longit(zb2, j, n_mid), ysign,
+                   steel_id(2, k, (ysign > 0 ? 10 : 20) + j));
 
       }
       for (int xsign : {1, -1}) {
         name.Form("SteelCornerBeam_S%02zu_%s_%s", k, tb,
                   xsign > 0 ? "R" : "L");
         place_beam(corner_beams, name, corner_profile(k, ysign), zb1, zb2,
-                   xsign * x_corner(zb1), xsign * x_corner(zb2), ysign);
+                   xsign * x_corner(zb1), xsign * x_corner(zb2), ysign,
+                   steel_id(3, k, (ysign > 0 ? 1 : 3) + (xsign > 0 ? 0 : 1)));
       }
     }
   }
