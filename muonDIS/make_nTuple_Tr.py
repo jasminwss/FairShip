@@ -240,7 +240,7 @@ for inputFolder in os.listdir(path):
 
         # Collect track IDs of muons which hit the Tracking Station
         for hit in event.strawtubesPoint:
-            trackingstation_id = hit.GetStationNumber()
+            trackingstation_id = hit.GetDetectorID() // 1000000  # station = detID // 1e6, cf. strawtubes::StrawDecode
             pid = hit.PdgCode()
             P = r.TMath.Sqrt(hit.GetPx() ** 2 + hit.GetPy() ** 2 + hit.GetPz() ** 2)
             if abs(pid) == 13 and trackingstation_id == 1 and P_threshold / u.GeV < P:
@@ -304,7 +304,7 @@ for inputFolder in os.listdir(path):
                 P = r.TMath.Sqrt(hit.GetPx() ** 2 + hit.GetPy() ** 2 + hit.GetPz() ** 2)
                 Pt = r.TMath.Sqrt(hit.GetPx() ** 2 + hit.GetPy() ** 2)
 
-                trackingstation_id = hit.GetStationNumber()
+                trackingstation_id = hit.GetDetectorID() // 1000000  # station = detID // 1e6, cf. strawtubes::StrawDecode
 
                 if (
                     abs(hit.PdgCode()) == 13
