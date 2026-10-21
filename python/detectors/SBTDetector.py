@@ -38,6 +38,8 @@ class SBTDetector(BaseDetector):
         for aMCPoint in self.intree.vetoPoint:
             key += 1
             detID = aMCPoint.GetDetectorID()
+            if detID < 100000:
+                continue  # steel support beam (detID 10001-30904), not a scintillator cell
             Eloss = aMCPoint.GetEnergyLoss()
             if detID not in ElossPerDetId:
                 ElossPerDetId[detID] = 0
