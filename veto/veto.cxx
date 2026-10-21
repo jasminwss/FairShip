@@ -1,3 +1,14 @@
+// contains a model of full support structure made of steel of sbt
+// No SBT (no LiSc, ribs, walls), only a steel housing made of straight beams
+// around the He balloon, profiles approximated as solid rectangles:
+//  - frames at the CAD z positions: vertical beams HEA260, horizontal IPE240
+//  - longitudinal beams on top/bottom at the former longitudinal rib
+//    positions: IPE240, last segment HEA260
+//  - corner beams: top IPE240, bottom HEA260 (between frames 2-5 IPE270)
+//  longitudinal and corner beams run tilted from frame to frame along the
+//  slope of the vessel
+
+
 // SPDX-License-Identifier: LGPL-3.0-or-later
 // SPDX-FileCopyrightText: Copyright CERN for the benefit of the SHiP
 // Collaboration
@@ -5,7 +16,7 @@
 // 09/07/2024
 // SBT software contact: anupama.reghunath@cern.ch
 /**
- * @file veto.cxx
+ * @file veto_fullsupport.cxx
  * @brief Implementation of the Veto detector class.
  *
  * This file contains the definitions for the Veto class used in the
@@ -33,7 +44,6 @@
 #include "ShipDetectorList.h"
 #include "ShipGeoUtil.h"
 #include "ShipStack.h"
-#include "ShipUnit.h"
 #include "TClonesArray.h"
 #include "TGeoArb8.h"
 #include "TGeoBBox.h"
@@ -51,9 +61,21 @@
 #include "TVirtualMC.h"
 #include "vetoPoint.h"
 
-using ShipUnit::cm;
-using ShipUnit::m;
-using ShipUnit::mm;
+constexpr Double_t cm = 1;         // cm
+constexpr Double_t m = 100 * cm;   //  m
+constexpr Double_t mm = 0.1 * cm;  //  mm
+
+/// steel beam profiles, approximated as solid rectangles with the same
+// cross-section area incl. fillets (see beam_profiles.py):
+// height h (away from the vessel) x thickness t
+struct BeamProfile {
+  double h;
+  double t;
+  int color;
+};
+constexpr BeamProfile kIPE240{240 * mm, 16.3 * mm, kCyan + 2};
+constexpr BeamProfile kIPE270{270 * mm, 17.0 * mm, kOrange};
+constexpr BeamProfile kHEA260{250 * mm, 34.7 * mm, kMagenta};
 
 /**
  * @brief Constructor for the Veto class.
@@ -96,58 +118,6 @@ TGeoVolume* veto::make_geo_trapezoid(
   return T;
 }
 
-TGeoVolume* veto::GeoTrapezoidHollow(
-    TString xname, Double_t wallthick, Double_t z_thick, Double_t x_thick_start,
-    Double_t x_thick_end, Double_t y_thick_start, Double_t y_thick_end,
-    Int_t color, TGeoMedium* material, Bool_t sens = kFALSE) {
-  Double_t dx_start = x_thick_start / 2;
-  Double_t dy_start = y_thick_start / 2;
-  Double_t dx_end = x_thick_end / 2;
-  Double_t dy_end = y_thick_end / 2;
-  Double_t dz = z_thick / 2;
-
-  TString nm = xname.ReplaceAll(
-      "-", "");  // otherwise it will try to subtract "-" in TGeoComposteShape
-  Double_t dx1 = dx_start + wallthick;
-  Double_t dx2 = dx_end + wallthick;
-  Double_t dy1 = dy_start + wallthick;
-  Double_t dy2 = dy_end + wallthick;
-
-  TGeoArb8* T2 = new TGeoArb8("T2" + nm, dz);
-  T2->SetVertex(0, -dx1, -dy1);
-  T2->SetVertex(1, -dx1, dy1);
-  T2->SetVertex(2, dx1, dy1);
-  T2->SetVertex(3, dx1, -dy1);
-  T2->SetVertex(4, -dx2, -dy2);
-  T2->SetVertex(5, -dx2, dy2);
-  T2->SetVertex(6, dx2, dy2);
-  T2->SetVertex(7, dx2, -dy2);
-
-  Double_t tdx1 = dx_start;
-  Double_t tdx2 = dx_end;
-  Double_t tdy1 = dy_start;
-  Double_t tdy2 = dy_end;
-  TGeoArb8* T1 = new TGeoArb8("T1" + nm, dz + 1.E-6);
-  T1->SetVertex(0, -tdx1, -tdy1);
-  T1->SetVertex(1, -tdx1, tdy1);
-  T1->SetVertex(2, tdx1, tdy1);
-  T1->SetVertex(3, tdx1, -tdy1);
-  T1->SetVertex(4, -tdx2, -tdy2);
-  T1->SetVertex(5, -tdx2, tdy2);
-  T1->SetVertex(6, tdx2, tdy2);
-  T1->SetVertex(7, tdx2, -tdy2);
-
-  TGeoCompositeShape* T321 =
-      new TGeoCompositeShape("T3" + nm, "T2" + nm + "-T1" + nm);
-  TGeoVolume* T = new TGeoVolume(xname, T321, material);
-  T->SetLineColor(color);
-  // and make the volumes sensitive..
-  if (sens) {
-    AddSensitiveVolume(T);
-  }
-  return T;
-}
-
 double veto::wx(double z) {  // calculate x thickness at z
 
   double wx1 = VetoStartInnerX;
@@ -168,590 +138,160 @@ double veto::wy(double z) {  // calculate y thickness at z
   return (wy1 + (z - z1) * (wy2 - wy1) / (z2 - z1));
 }
 
-TGeoVolume* veto::GeoSideObj(const TString& xname, double dz, double a1,
-                             double b1, double a2, double b2, double dA,
-                             double dB, Int_t color, TGeoMedium* material,
-                             Bool_t sens = kFALSE) {
-  // a1- width in X, at the beginning
-  // b1- width in Y, at the beginning
-  // a2- width in X, at the end
-  // b2- width in Y, at the end
-
-  TGeoArb8* T1 = new TGeoArb8(dz);
-  T1->SetVertex(0, 0, 0);
-  T1->SetVertex(1, 0, b1);
-  T1->SetVertex(2, a1, b1);
-  T1->SetVertex(3, a1, 0);
-
-  T1->SetVertex(4, dA, dB);
-  T1->SetVertex(5, dA, dB + b2);
-  T1->SetVertex(6, dA + a2, dB + b2);
-  T1->SetVertex(7, dA + a2, dB);
-
-  TGeoVolume* T = new TGeoVolume(xname, T1, material);
+namespace {
+/// straight steel beam (box) with half lengths dx, dy, dz
+TGeoVolume* make_beam(const TString& xname, double dx, double dy, double dz,
+                      Int_t color, TGeoMedium* material) {
+  TGeoVolume* T = new TGeoVolume(
+      xname, new TGeoBBox(xname + "_shape", dx, dy, dz), material);
   T->SetLineColor(color);
-  // and make the volumes sensitive..
-  if (sens) {
-    AddSensitiveVolume(T);
-  }
   return T;
 }
 
-TGeoVolume* veto::GeoCornerLiSc1(const TString& xname, double dz,
-                                 bool isClockwise, double a1, double a2,
-                                 double b1, double b2, double dA, double dB,
-                                 Int_t color, TGeoMedium* material,
-                                 Bool_t sens = kFALSE) {
-  TGeoArb8* T1 = new TGeoArb8(dz);
-
-  if (isClockwise) {
-    T1->SetVertex(0, 0, 0);
-    T1->SetVertex(1, 0, b1);
-    T1->SetVertex(2, a1 + b1, b1);
-    T1->SetVertex(3, a1, 0);
-
-    T1->SetVertex(4, dA, dB);
-    T1->SetVertex(5, dA, dB + b2);
-    T1->SetVertex(6, dA + a2 + b2, dB + b2);
-    T1->SetVertex(7, dA + a2, dB);
-  } else {
-    T1->SetVertex(0, 0, 0);
-    T1->SetVertex(1, -a1, 0);
-    T1->SetVertex(2, -(a1 + b1), b1);
-    T1->SetVertex(3, 0, b1);
-
-    T1->SetVertex(4, -dA, dB);
-    T1->SetVertex(5, -(dA + a2), dB);
-    T1->SetVertex(6, -(dA + a2 + b2), dB + b2);
-    T1->SetVertex(7, -dA, dB + b2);
-  }
-
-  TGeoVolume* T = new TGeoVolume(xname, T1, material);
+/// straight steel beam with cross section 2*hx x 2*hy, centred at the origin;
+/// the cross section centre is shifted by (-sx, -sy) at -dz and (sx, sy) at +dz
+TGeoVolume* make_tilted_beam(const TString& xname, double hx, double hy,
+                             double dz, double sx, double sy, Int_t color,
+                             TGeoMedium* material) {
+  TGeoArb8* shape = new TGeoArb8(xname + "_shape", dz);
+  shape->SetVertex(0, -sx - hx, -sy - hy);
+  shape->SetVertex(1, -sx - hx, -sy + hy);
+  shape->SetVertex(2, -sx + hx, -sy + hy);
+  shape->SetVertex(3, -sx + hx, -sy - hy);
+  shape->SetVertex(4, sx - hx, sy - hy);
+  shape->SetVertex(5, sx - hx, sy + hy);
+  shape->SetVertex(6, sx + hx, sy + hy);
+  shape->SetVertex(7, sx + hx, sy - hy);
+  TGeoVolume* T = new TGeoVolume(xname, shape, material);
   T->SetLineColor(color);
-  // and make the volumes sensitive..
-  if (sens) {
-    AddSensitiveVolume(T);
-  }
   return T;
 }
-
-TGeoVolume* veto::GeoCornerLiSc2(const TString& xname, double dz,
-                                 bool isClockwise, double a1, double a2,
-                                 double b1, double b2, double dA, double dB,
-                                 Int_t color, TGeoMedium* material,
-                                 Bool_t sens = kFALSE) {
-  TGeoArb8* T1 = new TGeoArb8(dz);
-
-  if (isClockwise) {
-    T1->SetVertex(0, 0, 0);
-    T1->SetVertex(1, 0, a1);
-    T1->SetVertex(2, b1, a1 + b1);
-    T1->SetVertex(3, b1, 0);
-
-    T1->SetVertex(4, dB, dA);
-    T1->SetVertex(5, dB, dA + a2);
-    T1->SetVertex(6, dB + b2, dA + a2 + b2);
-    T1->SetVertex(7, dB + b2, dA);
-  } else {
-    T1->SetVertex(0, 0, 0);
-    T1->SetVertex(1, b1, 0);
-    T1->SetVertex(2, b1, -(a1 + b1));
-    T1->SetVertex(3, 0, -a1);
-
-    T1->SetVertex(4, dB, -dA);
-    T1->SetVertex(5, dB + b2, -dA);
-    T1->SetVertex(6, dB + b2, -(dA + a2 + b2));
-    T1->SetVertex(7, dB, -(dA + a2));
-  }
-
-  TGeoVolume* T = new TGeoVolume(xname, T1, material);
-  T->SetLineColor(color);
-  // and make the volumes sensitive.
-  if (sens) {
-    AddSensitiveVolume(T);
-  }
-  return T;
-}
-
-TGeoVolumeAssembly* veto::GeoCornerRib(const TString& xname,
-                                       double rib_thickness, double lt1,
-                                       double lt2, double dz, double slopeX,
-                                       double slopeY, Int_t color,
-                                       TGeoMedium* material,
-                                       Bool_t sens = kFALSE) {
-  Double_t wz = dz * 2;
-  double d = rib_thickness * sqrt(2) / 2;
-  double dx = slopeX * wz;
-  double dy = slopeY * wz;
-
-  TGeoArb8* T1 = new TGeoArb8(dz);
-  T1->SetVertex(0, lt1, lt1 - d);
-  T1->SetVertex(1, 0, -d);
-  T1->SetVertex(2, 0, 0);
-  T1->SetVertex(3, lt1, lt1);
-
-  T1->SetVertex(4, dx + lt2, dy + lt2 - d);
-  T1->SetVertex(5, dx, dy - d);
-  T1->SetVertex(6, dx, dy);
-  T1->SetVertex(7, dx + lt2, dy + lt2);
-
-  TGeoArb8* T2 = new TGeoArb8(dz);
-  T2->SetVertex(0, lt1 - d, lt1);
-  T2->SetVertex(1, lt1, lt1);
-  T2->SetVertex(2, 0, 0);
-  T2->SetVertex(3, -d, 0);
-
-  T2->SetVertex(4, dx + lt2 - d, dy + lt2);
-  T2->SetVertex(5, dx + lt2, dy + lt2);
-  T2->SetVertex(6, dx, dy);
-  T2->SetVertex(7, dx - d, dy);
-
-  TGeoVolume* T1v = new TGeoVolume("part", T1, material);
-  TGeoVolume* T2v = new TGeoVolume("part", T2, material);
-  T1v->SetLineColor(color);
-  T2v->SetLineColor(color);
-  if (sens) {
-    AddSensitiveVolume(T1v);
-  }
-  if (sens) {
-    AddSensitiveVolume(T2v);
-  }
-
-  TGeoVolumeAssembly* T = new TGeoVolumeAssembly(xname);
-  T->AddNode(T1v, 1, new TGeoTranslation(0, 0, 0));
-  T->AddNode(T2v, 2, new TGeoTranslation(0, 0, 0));
-  return T;
-}
-
-int veto::makeId(double z, double x, double y) {
-  double Z = z / 10;
-  double r = sqrt(x * x + y * y);
-  double phi = 999;
-  if (y >= 0)
-    phi = acos(x / r);
-  else
-    phi = -acos(x / r) + 2 * TMath::Pi();
-
-  phi = phi * 180 / TMath::Pi();
-  return static_cast<int>(Z) * 1000000 + static_cast<int>(r) * 1000 +
-         static_cast<int>(phi);
-}
-
-int veto::liscId(const TString& ShapeTypeName, int block_number, int Zlayer,
-                 int number, int position) {
-  int id = 999999;
-  int ShapeType = -1;
-
-  if (ShapeTypeName == "LiScX")
-    ShapeType = 1;
-  else if (ShapeTypeName == "LiScY")
-    ShapeType = 2;
-  else if (ShapeTypeName == "LiSc_S3")
-    ShapeType = 3;
-  else if (ShapeTypeName == "LiSc_S4")
-    ShapeType = 4;
-  else if (ShapeTypeName == "LiSc_S5")
-    ShapeType = 5;
-  else if (ShapeTypeName == "LiSc_S6")
-    ShapeType = 6;
-
-  if (ShapeType < 0)
-    id = 999999;
-  else
-    id = ShapeType * 100000 + block_number * 10000 + Zlayer * 100 +
-         number * 10 + position;
-
-  return id;
-}
-
-void veto::add_block(TGeoVolumeAssembly* outer_wall,
-                     TGeoVolumeAssembly* longitudinal_rib,
-                     TGeoVolumeAssembly* vertical_rib, TGeoVolumeAssembly* lisc,
-                     int block_number, int nx, int ny, double z1, double z2,
-                     double z_shift, double cell_thickness_z,
-                     double wall_thickness, double lisc_thickness_start,
-                     double lisc_thickness_end, double rib_thickness) {
-  TString blockName = "block";
-  blockName += block_number;
-
-  int ribColor = 15;
-
-  double wz = (z2 - z1);
-  double slX = (wx(z2) - wx(z1)) / 2 / wz;
-  double slY = (wy(z2) - wy(z1)) / 2 / wz;
-
-  double dZ =
-      (cell_thickness_z - rib_thickness) / 2;  // half space between ribs
-
-  double tX = 0;
-  double tY = 0;
-  double tZ = 0;
-  TString name("");
-
-  /// outer wall
-  TString nameOuterWall = (TString)outer_wall->GetName() + "_" + blockName;
-  TGeoVolume* TOW =
-      GeoTrapezoidHollow(nameOuterWall, wall_thickness, wz,
-                         wx(z1) + 2 * (wall_thickness + lisc_thickness_start),
-                         wx(z2) + 2 * (wall_thickness + lisc_thickness_end),
-                         wy(z1) + 2 * (wall_thickness + lisc_thickness_start),
-                         wy(z2) + 2 * (wall_thickness + lisc_thickness_end),
-                         ribColor, supportMedIn);
-  outer_wall->AddNode(TOW, 0, new TGeoTranslation(0, 0, z_shift));
-
-  /// define longitudinal ribs
-  std::vector<TGeoVolume*> vLongitRibX(nx);
-  std::vector<TGeoVolume*> vLongitRibY(ny);
-
-  double z1_x_thickness_1 =
-      wx(z1 + rib_thickness) + 2 * (wall_thickness + lisc_thickness_start);
-  double z1_x_thickness_2 =
-      wx(z1 + cell_thickness_z) + 2 * (wall_thickness + lisc_thickness_start);
-
-  double z1_x1_Step = (z1_x_thickness_1 - nx * rib_thickness) / (nx + 1);
-  double z1_x2_Step = (z1_x_thickness_2 - nx * rib_thickness) / (nx + 1);
-
-  double z1_y_thickness_1 =
-      wy(z1 + rib_thickness) + 2 * (wall_thickness + lisc_thickness_start);
-  double z1_y_thickness_2 =
-      wy(z1 + cell_thickness_z) + 2 * (wall_thickness + lisc_thickness_start);
-
-  double z1_y1_Step = (z1_y_thickness_1 - ny * rib_thickness) / (ny + 1);
-  double z1_y2_Step = (z1_y_thickness_2 - ny * rib_thickness) / (ny + 1);
-
-  double z1_x1, z1_x2, z1_y1, z1_y2;
-
-  z1_x1 = z1_x_thickness_1 / 2;
-  z1_x2 = z1_x_thickness_2 / 2;
-
-  z1_y1 = z1_y_thickness_1 / 2 - lisc_thickness_start;
-  z1_y2 = z1_y_thickness_2 / 2 - lisc_thickness_end;
-
-  for (int i = 0; i < nx; i++) {
-    z1_x1 = z1_x1 - z1_x1_Step;
-    z1_x2 = z1_x2 - z1_x2_Step;
-
-    name = "";
-    name.Form("vLongitRibX_%s_phi%d", blockName.Data(),
-              makeId(0, z1_x1, z1_y1));
-    vLongitRibX.at(i) =
-        GeoSideObj(name, dZ, rib_thickness, lisc_thickness_start, rib_thickness,
-                   lisc_thickness_end, z1_x2 - z1_x1, z1_y2 - z1_y1, ribColor,
-                   supportMedIn);
-
-    z1_x1 = z1_x1 - rib_thickness;
-    z1_x2 = z1_x2 - rib_thickness;
-  }
-
-  z1_y1 = z1_y_thickness_1 / 2;
-  z1_y2 = z1_y_thickness_2 / 2;
-
-  z1_x1 = z1_x_thickness_1 / 2 - lisc_thickness_start;
-  z1_x2 = z1_x_thickness_2 / 2 - lisc_thickness_end;
-
-  for (int i = 0; i < ny; i++) {
-    z1_y1 = z1_y1 - z1_y1_Step;
-    z1_y2 = z1_y2 - z1_y2_Step;
-
-    name = "";
-    name.Form("vLongitRibY_%s_phi%d", blockName.Data(),
-              makeId(0, z1_x1, z1_y1));
-    vLongitRibY.at(i) = GeoSideObj(
-        name, dZ, lisc_thickness_start, rib_thickness, lisc_thickness_end,
-        rib_thickness, z1_x2 - z1_x1, z1_y2 - z1_y1, ribColor, supportMedIn);
-    z1_y1 = z1_y1 - rib_thickness;
-    z1_y2 = z1_y2 - rib_thickness;
-  }
-
-  /// define corner ribs
-
-  name = "CornerRib_L_" + blockName + "_id";
-  TGeoVolumeAssembly* CornerRib_L =
-      GeoCornerRib(name, rib_thickness, lisc_thickness_start,
-                   lisc_thickness_end, dZ, slX, slY, ribColor, supportMedIn);
-  name = "CornerRib_R_" + blockName + "_id";
-  TGeoVolumeAssembly* CornerRib_R =
-      GeoCornerRib(name, rib_thickness, lisc_thickness_start,
-                   lisc_thickness_end, dZ, slY, slX, ribColor, supportMedIn);
-
-  const int nZSteps =
-      static_cast<int>(std::floor((z2 - z1) / cell_thickness_z)) + 1;
-  for (int iz = 0; iz < nZSteps; ++iz) {
-    const double zi = z1 + iz * cell_thickness_z;
-    if (zi >= z2) break;
-    int Zlayer = static_cast<int>(zi) / cell_thickness_z + 1;
-
-    /// define & place vertical ribs
-    TString nameVR("");
-    nameVR.Form("VetoVerticalRib_z%d", static_cast<int>(zi));
-    TGeoVolume* TVR = GeoTrapezoidHollow(
-        nameVR, lisc_thickness_start, rib_thickness,
-        wx(zi) + 2 * wall_thickness,
-        wx(zi + rib_thickness) + 2 * wall_thickness,
-        wy(zi) + 2 * wall_thickness,
-        wy(zi + rib_thickness) + 2 * wall_thickness, ribColor, supportMedIn);
-    tZ = z_shift - wz / 2 + zi - z1 + rib_thickness / 2;
-
-    vertical_rib->AddNode(TVR, 0, new TGeoTranslation(0, 0, tZ));
-
-    if (z2 - zi < cell_thickness_z) continue;
-
-    tX = wx(zi + rib_thickness) / 2 + wall_thickness;
-    tY = wy(zi + rib_thickness) / 2 + wall_thickness;
-    tZ = tZ + cell_thickness_z / 2;
-
-    /// place corner ribs
-    longitudinal_rib->AddNode(
-        CornerRib_L, makeId(zi, tX, tY),
-        new TGeoCombiTrans(tX, tY, tZ, new TGeoRotation("r", 0, 0, 0)));
-    longitudinal_rib->AddNode(
-        CornerRib_L, makeId(zi, -tX, -tY),
-        new TGeoCombiTrans(-tX, -tY, tZ, new TGeoRotation("r", 0, 0, 180)));
-    longitudinal_rib->AddNode(
-        CornerRib_R, makeId(zi, -tX, tY),
-        new TGeoCombiTrans(-tX, tY, tZ, new TGeoRotation("r", 0, 0, 90)));
-    longitudinal_rib->AddNode(
-        CornerRib_R, makeId(zi, tX, -tY),
-        new TGeoCombiTrans(tX, -tY, tZ, new TGeoRotation("r", 0, 0, 270)));
-
-    double zi_x_thickness_1 =
-        wx(zi + rib_thickness) + 2 * (wall_thickness + lisc_thickness_start);
-    double zi_x_thickness_2 =
-        wx(zi + cell_thickness_z) + 2 * (wall_thickness + lisc_thickness_start);
-
-    double zi_x1_Step = (zi_x_thickness_1 - nx * rib_thickness) / (nx + 1);
-    double zi_x2_Step = (zi_x_thickness_2 - nx * rib_thickness) / (nx + 1);
-
-    double zi_y_thickness_1 =
-        wy(zi + rib_thickness) + 2 * (wall_thickness + lisc_thickness_start);
-    double zi_y_thickness_2 =
-        wy(zi + cell_thickness_z) + 2 * (wall_thickness + lisc_thickness_start);
-
-    double zi_y1_Step = (zi_y_thickness_1 - ny * rib_thickness) / (ny + 1);
-    double zi_y2_Step = (zi_y_thickness_2 - ny * rib_thickness) / (ny + 1);
-
-    double zi_x1, zi_x2, zi_y1, zi_y2;
-
-    zi_x1 = zi_x_thickness_1 / 2 - lisc_thickness_start;
-    zi_x2 = zi_x_thickness_2 / 2 - lisc_thickness_start;
-
-    zi_y1 = zi_y_thickness_1 / 2;
-    zi_y2 = zi_y_thickness_2 / 2;
-
-    name = "";
-    name.Form("LiSc_S4_%d", liscId("LiSc_S4", block_number, Zlayer, 0, 0));
-    TGeoVolume* LiSc_S4 =
-        GeoCornerLiSc2(name, dZ, 0, zi_y1_Step - lisc_thickness_start,
-                       zi_y2_Step - lisc_thickness_end, lisc_thickness_start,
-                       lisc_thickness_end, zi_y2_Step - zi_y1_Step,
-                       zi_x2 - zi_x1, kMagenta - 10, vetoMed, true);
-    lisc->AddNode(LiSc_S4, liscId("LiSc_S4", block_number, Zlayer, 0, 1),
-                  new TGeoCombiTrans(zi_x1, -(zi_y1 - zi_y1_Step), tZ,
-                                     new TGeoRotation("r", 0, 0, 0)));
-    lisc->AddNode(LiSc_S4, liscId("LiSc_S4", block_number, Zlayer, 0, 2),
-                  new TGeoCombiTrans(-zi_x1, (zi_y1 - zi_y1_Step), tZ,
-                                     new TGeoRotation("r", 0, 0, 180)));
-
-    name = "";
-    name.Form("LiSc_S6_%d", liscId("LiSc_S6", block_number, Zlayer, ny, 0));
-    TGeoVolume* LiSc_S6 =
-        GeoCornerLiSc2(name, dZ, 1, zi_y1_Step - lisc_thickness_start,
-                       zi_y2_Step - lisc_thickness_end, lisc_thickness_start,
-                       lisc_thickness_end, zi_y2_Step - zi_y1_Step,
-                       zi_x2 - zi_x1, kMagenta - 10, vetoMed, true);
-    lisc->AddNode(LiSc_S6, liscId("LiSc_S6", block_number, Zlayer, ny, 1),
-                  new TGeoCombiTrans(zi_x1, (zi_y1 - zi_y1_Step), tZ,
-                                     new TGeoRotation("r", 0, 0, 0)));
-    lisc->AddNode(LiSc_S6, liscId("LiSc_S6", block_number, Zlayer, ny, 2),
-                  new TGeoCombiTrans(-zi_x1, -(zi_y1 - zi_y1_Step), tZ,
-                                     new TGeoRotation("r", 0, 0, 180)));
-
-    for (int i = 0; i < ny; i++) {
-      zi_y1 = zi_y1 - zi_y1_Step;
-      zi_y2 = zi_y2 - zi_y2_Step;
-
-      longitudinal_rib->AddNode(
-          vLongitRibY.at(i), makeId(zi, zi_x1, zi_y1),
-          new TGeoCombiTrans(zi_x1, (zi_y1 - rib_thickness), tZ,
-                             new TGeoRotation("r", 0, 0, 0)));
-      longitudinal_rib->AddNode(
-          vLongitRibY.at(i), makeId(zi, -zi_x1, -zi_y1),
-          new TGeoCombiTrans(-zi_x1, -(zi_y1 - rib_thickness), tZ,
-                             new TGeoRotation("r", 0, 0, 180)));
-
-      if (i > 0) {
-        name = "";
-        name.Form("LiScY_%d", liscId("LiScY", block_number, Zlayer, i, 0));
-        TGeoVolume* LiScY =
-            GeoSideObj(name, dZ, lisc_thickness_start, zi_y1_Step,
-                       lisc_thickness_end, zi_y2_Step, zi_x2 - zi_x1,
-                       zi_y2 - zi_y1, kMagenta - 10, vetoMed, true);
-        lisc->AddNode(LiScY, liscId("LiScY", block_number, Zlayer, i, 1),
-                      new TGeoCombiTrans(zi_x1, zi_y1, tZ,
-                                         new TGeoRotation("r", 0, 0, 0)));
-        lisc->AddNode(LiScY, liscId("LiScY", block_number, Zlayer, i, 2),
-                      new TGeoCombiTrans(-zi_x1, -zi_y1, tZ,
-                                         new TGeoRotation("r", 0, 0, 180)));
-      }
-
-      zi_y1 = zi_y1 - rib_thickness;
-      zi_y2 = zi_y2 - rib_thickness;
-    }
-
-    zi_x1 = zi_x_thickness_1 / 2;
-    zi_x2 = zi_x_thickness_2 / 2;
-
-    zi_y1 = zi_y_thickness_1 / 2 - lisc_thickness_start;
-    zi_y2 = zi_y_thickness_2 / 2 - lisc_thickness_start;
-
-    name = "";
-    name.Form("LiSc_S3_%d", liscId("LiSc_S3", block_number, Zlayer, 0, 0));
-
-    TGeoVolume* LiSc_S3 = GeoCornerLiSc1(
-        name, dZ, 0,
-        zi_x1_Step - lisc_thickness_start - rib_thickness / sqrt(2),
-        zi_x2_Step - lisc_thickness_end - rib_thickness / sqrt(2),
-        lisc_thickness_start, lisc_thickness_end,
-        zi_x2_Step - zi_x1_Step - rib_thickness / 2, zi_y2 - zi_y1,
-        kMagenta - 10, vetoMed, true);
-    lisc->AddNode(LiSc_S3, liscId("LiSc_S3", block_number, Zlayer, 0, 1),
-                  new TGeoCombiTrans(-(zi_x1 - zi_x1_Step), zi_y1, tZ,
-                                     new TGeoRotation("r", 0, 0, 0)));
-    lisc->AddNode(LiSc_S3, liscId("LiSc_S3", block_number, Zlayer, 0, 2),
-                  new TGeoCombiTrans((zi_x1 - zi_x1_Step), -zi_y1, tZ,
-                                     new TGeoRotation("r", 0, 0, 180)));
-
-    name = "";
-    name.Form("LiSc_S5_%d", liscId("LiSc_S5", block_number, Zlayer, nx, 0));
-
-    TGeoVolume* LiSc_S5 = GeoCornerLiSc1(
-        name, dZ, 1,
-        zi_x1_Step - lisc_thickness_start - rib_thickness / sqrt(2),
-        zi_x2_Step - lisc_thickness_end - rib_thickness / sqrt(2),
-        lisc_thickness_start, lisc_thickness_end,
-        zi_x2_Step - zi_x1_Step - rib_thickness / 2, zi_y2 - zi_y1,
-        kMagenta - 10, vetoMed, true);
-    lisc->AddNode(LiSc_S5, liscId("LiSc_S5", block_number, Zlayer, nx, 1),
-                  new TGeoCombiTrans((zi_x1 - zi_x1_Step), zi_y1, tZ,
-                                     new TGeoRotation("r", 0, 0, 0)));
-    lisc->AddNode(LiSc_S5, liscId("LiSc_S5", block_number, Zlayer, nx, 2),
-                  new TGeoCombiTrans(-(zi_x1 - zi_x1_Step), -zi_y1, tZ,
-                                     new TGeoRotation("r", 0, 0, 180)));
-
-    for (int i = 0; i < nx; i++) {
-      zi_x1 = zi_x1 - zi_x1_Step;
-      zi_x2 = zi_x2 - zi_x2_Step;
-
-      longitudinal_rib->AddNode(
-          vLongitRibX.at(i), makeId(zi, zi_x1, zi_y1),
-          new TGeoCombiTrans((zi_x1 - rib_thickness), zi_y1, tZ,
-                             new TGeoRotation("r", 0, 0, 0)));
-      longitudinal_rib->AddNode(
-          vLongitRibX.at(i), makeId(zi, -zi_x1, -zi_y1),
-          new TGeoCombiTrans(-(zi_x1 - rib_thickness), -zi_y1, tZ,
-                             new TGeoRotation("r", 0, 0, 180)));
-
-      if (i > 0) {
-        name = "";
-        name.Form("LiScX_%d", liscId("LiScX", block_number, Zlayer, i, 0));
-        TGeoVolume* LiScX =
-            GeoSideObj(name, dZ, zi_x1_Step, lisc_thickness_start, zi_x2_Step,
-                       lisc_thickness_end, zi_x2 - zi_x1, zi_y2 - zi_y1,
-                       kMagenta - 10, vetoMed, true);
-        lisc->AddNode(LiScX, liscId("LiScX", block_number, Zlayer, i, 1),
-                      new TGeoCombiTrans(zi_x1, zi_y1, tZ,
-                                         new TGeoRotation("r", 0, 0, 0)));
-        lisc->AddNode(LiScX, liscId("LiScX", block_number, Zlayer, i, 2),
-                      new TGeoCombiTrans(-zi_x1, -zi_y1, tZ,
-                                         new TGeoRotation("r", 0, 0, 180)));
-      }
-
-      zi_x1 = zi_x1 - rib_thickness;
-      zi_x2 = zi_x2 - rib_thickness;
-    }
-  }
-}
+}  // namespace
 
 TGeoVolume* veto::make_segments() {
   TGeoVolumeAssembly* tTankVol = new TGeoVolumeAssembly("T2");
 
-  Double_t cell_thickness_z0 =
-      800 * mm;  // length of the first cell along z (800mm) 2024 version
-  Double_t cell_thickness_z =
-      820 * mm;  // length of the cell along z (820mm) 2024 version
+  int nx = 2;  // number of longitudinal beams on top and on bottom
 
-  TString nameOuterWall = "VetoOuterWall";
-  TGeoVolumeAssembly* outer_wall = new TGeoVolumeAssembly(nameOuterWall);
-
-  TString nameLongitRib = "VetoLongitRib";
-  TGeoVolumeAssembly* longitudinal_rib = new TGeoVolumeAssembly(nameLongitRib);
-
-  TString nameVerticalRib = "VetoVerticalRib";
-  TGeoVolumeAssembly* vertical_rib = new TGeoVolumeAssembly(nameVerticalRib);
-
-  TString nameLiSc = "VetoLiSc";
-  TGeoVolumeAssembly* lisc = new TGeoVolumeAssembly(nameLiSc);
-
-  int nx = 2;  // number of Longitudinal ribs on X
-  int ny = 3;  // number of Longitudinal ribs on Y
-
-  double wall_thickness = f_InnerSupportThickness;
+  // wall, scintillator and rib dimensions of the former SBT are only used as
+  // reference coordinates for placing the steel beams
+  double wall_thickness = 6 * mm;  // fixed here, ignores innerSupport in yaml
   double lisc_thickness = f_VetoThickness;
-  double rib_thickness = f_RibThickness;
+  double rib_thickness = 6 * mm;   // fixed here, ignores rib in yaml
 
-  //******************************** Block1
-  //**************************************
-  double z1 = 0 * m;
-  double z2 = 800 * mm;
-  double wz = (z2 - z1);
 
-  double z_shift = wz / 2;  // calibration of Z position
-
-  add_block(outer_wall, longitudinal_rib, vertical_rib, lisc, 1, nx, ny, z1, z2,
-            z_shift, cell_thickness_z0, wall_thickness, lisc_thickness,
-            lisc_thickness, rib_thickness);
-
-  //******************************** Block2
-  //**************************************
-
-  z_shift += wz / 2;
-
-  z1 = 800 * mm;
-  z2 = 50.0 * m;
-  wz = (z2 - z1);
-
-  z_shift += wz / 2;
-
-  add_block(outer_wall, longitudinal_rib, vertical_rib, lisc, 2, nx, ny, z1, z2,
-            z_shift, cell_thickness_z, wall_thickness, lisc_thickness,
-            lisc_thickness, rib_thickness);
-
-  double zi = z2;
-
-  TString nameVR("");
-  nameVR.Form("VetoVerticalRib_z%d", static_cast<int>(zi));
-  TGeoVolume* TVR = GeoTrapezoidHollow(
-      nameVR, lisc_thickness, rib_thickness, wx(zi) + 2 * wall_thickness,
-      wx(zi + rib_thickness) + 2 * wall_thickness, wy(zi) + 2 * wall_thickness,
-      wy(zi + rib_thickness) + 2 * wall_thickness, 15, supportMedIn);
-  double tZ = z_shift - wz / 2 + zi - z1 + rib_thickness / 2;
-
-  vertical_rib->AddNode(TVR, 0, new TGeoTranslation(0, 0, tZ));
-
-  /// inner vessel: decay medium nested in PVC balloon nested in support wall.
-  /// The vessel is solid; the liner leaves a wall of thickness wall_thickness,
-  /// the decay medium leaves a balloon skin of thickness f_he_balloon_thickness
-  /// on all sides (the front/back skin doubles as the balloon lids).
   const double z_start = 0 * m;
   const double z_end = 50 * m;
+
+  /// z positions of the steel frames (upstream face) from CAD, given relative
+  /// to the vessel centre and shifted to the local frame z = 0 ... 50 m
+  const double z_offset = 25 * m;
+  std::vector<double> z_frames;
+  for (double z : {-25.0, -20.0, -15.01, -10.01, -5.02, -0.02, 4.97, 9.97,
+                   14.96, 19.96, 25.0}) {
+    z_frames.push_back(z_offset + z * m);
+  }
+
+  TGeoMedium* steelMed = gGeoManager->GetMedium("steel");
+
+  TGeoVolumeAssembly* frames = new TGeoVolumeAssembly("VetoSteelFrame");
+  TGeoVolumeAssembly* longit_beams =
+      new TGeoVolumeAssembly("VetoSteelLongitBeam");
+  TGeoVolumeAssembly* corner_beams =
+      new TGeoVolumeAssembly("VetoSteelCornerBeam");
+
+  TString name("");
+  /// steel frames: vertical beams (along y, HEA260) over the full outer
+  /// height, horizontal beams (along x, IPE240) in between; inner edge at the
+  /// former inner wall, all members start at the upstream face zf
+  for (size_t k = 0; k < z_frames.size(); ++k) {
+    const double zf = z_frames[k];
+    const double zc = zf + kHEA260.t / 2;
+    const double ax = wx(zc) / 2 + wall_thickness;  // inner half width
+    const double ay = wy(zc) / 2 + wall_thickness;  // inner half height
+
+    const double xs = ax + kHEA260.h / 2;
+    const double yt = ay + kIPE240.h / 2;
+    const double zs = zf + kHEA260.t / 2;
+    const double zt = zf + kIPE240.t / 2;
+    for (int xsign : {1, -1}) {
+      name.Form("SteelFrameSide_F%02zu_%s", k, xsign > 0 ? "R" : "L");
+      TGeoVolume* side = make_beam(name, kHEA260.h / 2, ay + kHEA260.h,
+                                   kHEA260.t / 2, kHEA260.color, steelMed);
+      frames->AddNode(side, 1, new TGeoTranslation(xsign * xs, 0, zs));
+    }
+    for (int ysign : {1, -1}) {
+      name.Form("SteelFrame%s_F%02zu", ysign > 0 ? "Top" : "Bottom", k);
+      TGeoVolume* topbottom = make_beam(name, ax, kIPE240.h / 2,
+                                        kIPE240.t / 2, kIPE240.color, steelMed);
+      frames->AddNode(topbottom, 1, new TGeoTranslation(0, ysign * yt, zt));
+    }
+  }
+
+  /// longitudinal and corner beams: one straight piece from frame to frame,
+  /// following the slope of the vessel in x and y
+  auto x_longit = [&](double z, int j, int n) {  // n beams, evenly spaced
+    const double x_width = wx(z) + 2 * (wall_thickness + lisc_thickness);
+    const double x_step = (x_width - n * rib_thickness) / (n + 1);
+    return x_width / 2 - (j + 1) * x_step - j * rib_thickness -
+           rib_thickness / 2;
+  };
+  auto x_corner = [&](double z) {
+    return wx(z) / 2 + wall_thickness + lisc_thickness / 2;
+  };
+  // one tilted beam from zb1 to zb2; x1/x2 = x centre at zb1/zb2,
+  // ysign = +1 top, -1 bottom; inner edge at the former inner wall
+  auto place_beam = [&](TGeoVolumeAssembly* assembly, const TString& nm,
+                        const BeamProfile& p, double zb1, double zb2,
+                        double x1, double x2, int ysign) {
+    const double y1 = ysign * (wy(zb1) / 2 + wall_thickness + p.h / 2);
+    const double y2 = ysign * (wy(zb2) / 2 + wall_thickness + p.h / 2);
+    TGeoVolume* v = make_tilted_beam(nm, p.t / 2, p.h / 2, (zb2 - zb1) / 2,
+                                     (x2 - x1) / 2, (y2 - y1) / 2, p.color,
+                                     steelMed);
+    assembly->AddNode(v, 1, new TGeoTranslation((x1 + x2) / 2, (y1 + y2) / 2,
+                                                (zb1 + zb2) / 2));
+  };
+
+  /// profiles per segment k (between frame k and k + 1, counted from 0)
+  const size_t nSeg = z_frames.size() - 1;
+  auto corner_profile = [&](size_t k, int ysign) -> const BeamProfile& {
+    if (ysign > 0) return kIPE240;                  // top corners
+    return (k >= 1 && k <= 3) ? kIPE270 : kHEA260;  // frames 2-5: IPE270
+  };
+  auto middle_profile = [&](size_t k) -> const BeamProfile& {
+    return (k + 1 == nSeg) ? kHEA260 : kIPE240;  // last segment: HEA260
+  };
+
+  for (size_t k = 0; k < nSeg; ++k) {
+    const double zb1 = z_frames[k] + kHEA260.t;  // behind the thickest member
+    const double zb2 = z_frames[k + 1];
+    for (int ysign : {1, -1}) {
+      const char* tb = ysign > 0 ? "top" : "bottom";
+      // first 5 segments: one centred beam, afterwards nx
+      const int n_mid = (k < 5) ? 1 : nx;
+      for (int j = 0; j < n_mid; ++j) {
+        name.Form("SteelLongitBeam_S%02zu_%s_%d", k, tb, j);
+        place_beam(longit_beams, name, middle_profile(k), zb1, zb2,
+                   x_longit(zb1, j, n_mid), x_longit(zb2, j, n_mid), ysign);
+
+      }
+      for (int xsign : {1, -1}) {
+        name.Form("SteelCornerBeam_S%02zu_%s_%s", k, tb,
+                  xsign > 0 ? "R" : "L");
+        place_beam(corner_beams, name, corner_profile(k, ysign), zb1, zb2,
+                   xsign * x_corner(zb1), xsign * x_corner(zb2), ysign);
+      }
+    }
+  }
+
+
+  /// decay medium nested in the He balloon (no inner wall)
   const double balloon_thickness = f_he_balloon_thickness;
-  TGeoVolume* vessel = make_geo_trapezoid(
-      "VetoInnerWall", z_end - z_start, wx(z_start) + 2 * wall_thickness,
-      wx(z_end) + 2 * wall_thickness, wy(z_start) + 2 * wall_thickness,
-      wy(z_end) + 2 * wall_thickness, 15, supportMedIn);
+  TGeoVolume* vessel = nullptr;  // balloon (or decay medium)
   TGeoVolume* decay_medium = nullptr;
   if (balloon_thickness > 0) {
-    TGeoVolume* liner =
+    vessel =
         make_geo_trapezoid("HeBalloon", z_end - z_start, wx(z_start), wx(z_end),
                            wy(z_start), wy(z_end), kGreen, f_he_balloon_med);
     decay_medium = make_geo_trapezoid(
@@ -761,22 +301,20 @@ TGeoVolume* veto::make_segments() {
         wy(z_start + balloon_thickness) - 2 * balloon_thickness,
         wy(z_end - balloon_thickness) - 2 * balloon_thickness, 1,
         decayVolumeMed);
-    liner->AddNode(decay_medium, 0);
-    vessel->AddNode(liner, 0);
+    vessel->AddNode(decay_medium, 0);
   } else {
     decay_medium = make_geo_trapezoid("decay_medium", z_end - z_start,
                                       wx(z_start), wx(z_end), wy(z_start),
                                       wy(z_end), 1, decayVolumeMed);
-    vessel->AddNode(decay_medium, 0);
+    vessel = decay_medium;
   }
   decay_medium->SetVisibility(kFALSE);
   tTankVol->AddNode(vessel, 0,
                     new TGeoTranslation(0, 0, (z_start + z_end) / 2));
 
-  tTankVol->AddNode(outer_wall, 0, new TGeoTranslation(0, 0, 0));
-  tTankVol->AddNode(vertical_rib, 0, new TGeoTranslation(0, 0, 0));
-  tTankVol->AddNode(longitudinal_rib, 0, new TGeoTranslation(0, 0, 0));
-  tTankVol->AddNode(lisc, 0, new TGeoTranslation(0, 0, 0));
+  tTankVol->AddNode(frames, 0, new TGeoTranslation(0, 0, 0));
+  tTankVol->AddNode(longit_beams, 0, new TGeoTranslation(0, 0, 0));
+  tTankVol->AddNode(corner_beams, 0, new TGeoTranslation(0, 0, 0));
 
   return tTankVol;
 }
@@ -866,6 +404,7 @@ void veto::ConstructGeometry() {
   ShipGeo::InitMedium(vetoMed_name.Data());
   ShipGeo::InitMedium(decayVolumeMed_name.Data());
   ShipGeo::InitMedium(f_he_balloon_med_name.Data());
+  ShipGeo::InitMedium("steel");
 
   gGeoManager->SetNsegments(100);
 
