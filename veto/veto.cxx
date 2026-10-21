@@ -61,9 +61,11 @@
 #include "TVirtualMC.h"
 #include "vetoPoint.h"
 
-constexpr Double_t cm = 1;         // cm
-constexpr Double_t m = 100 * cm;   //  m
-constexpr Double_t mm = 0.1 * cm;  //  mm
+#include "ShipUnit.h"
+using ShipUnit::cm;
+using ShipUnit::m;
+using ShipUnit::mm;
+
 
 /// steel beam profiles, approximated as solid rectangles with the same
 // cross-section area incl. fillets (see beam_profiles.py):
