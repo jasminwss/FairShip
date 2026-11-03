@@ -7,6 +7,7 @@
 //  - corner beams: top IPE240, bottom HEA260 (between frames 2-5 IPE270)
 //  longitudinal and corner beams run tilted from frame to frame along the
 //  slope of the vessel
+// only first 6 containers are built!
 
 
 // SPDX-License-Identifier: LGPL-3.0-or-later
@@ -186,6 +187,7 @@ TGeoVolume* veto::make_segments() {
   TGeoVolumeAssembly* tTankVol = new TGeoVolumeAssembly("T2");
 
   int nx = 2;  // number of longitudinal beams on top and on bottom
+  const size_t nContainers = 6; //only build first 6 containers
 
   // wall, scintillator and rib dimensions of the former SBT are only used as
   // reference coordinates for placing the steel beams
@@ -218,7 +220,7 @@ TGeoVolume* veto::make_segments() {
   /// steel frames: vertical beams (along y, HEA260) over the full outer
   /// height, horizontal beams (along x, IPE240) in between; inner edge at the
   /// former inner wall, all members start at the upstream face zf
-  for (size_t k = 0; k < z_frames.size(); ++k) {
+  for (size_t k = 0; k <= nContainers && k < z_frames.size(); ++k) {
     const double zf = z_frames[k];
     const double zc = zf + kHEA260.t / 2;
     const double ax = wx(zc) / 2 + wall_thickness;  // inner half width
@@ -283,7 +285,7 @@ TGeoVolume* veto::make_segments() {
     return (k + 1 == nSeg) ? kHEA260 : kIPE240;  // last segment: HEA260
   };
 
-  for (size_t k = 0; k < nSeg; ++k) {
+  for (size_t k = 0; k < std::min(nSeg, nContainers); ++k) {
     const double zb1 = z_frames[k] + kHEA260.t;  // behind the thickest member
     const double zb2 = z_frames[k + 1];
     for (int ysign : {1, -1}) {
