@@ -185,7 +185,7 @@ TGeoVolume* make_tilted_beam(const TString& xname, double hx, double hy,
 TGeoVolume* veto::make_segments() {
   TGeoVolumeAssembly* tTankVol = new TGeoVolumeAssembly("T2");
 
-  int nx = 2;  // number of longitudinal beams on top and on bottom
+  int nx = 0;  // number of longitudinal beams on top and on bottom
 
   // wall, scintillator and rib dimensions of the former SBT are only used as
   // reference coordinates for placing the steel beams
@@ -289,7 +289,7 @@ TGeoVolume* veto::make_segments() {
     for (int ysign : {1, -1}) {
       const char* tb = ysign > 0 ? "top" : "bottom";
       // first 5 segments: one centred beam, afterwards nx
-      const int n_mid = (k < 5) ? 1 : nx;
+      const int n_mid = 0; // no longitudinal beams on top/bottom
       for (int j = 0; j < n_mid; ++j) {
         name.Form("SteelLongitBeam_S%02zu_%s_%d", k, tb, j);
         place_beam(longit_beams, name, middle_profile(k), zb1, zb2,
