@@ -416,11 +416,11 @@ void veto::add_block(TGeoVolumeAssembly* outer_wall,
 
 
   /// rib thicknesses
-  const double long_rib_thickness = 6 * mm;  // longitudinal ribs, alu
+  const double long_rib_thickness = rib_thickness;  // longitudinal ribs, alu
   const double corner_rib_thickness = rib_thickness;  // corner ribs, alu
   // all vertical ribs alu, 6 mm (the former steel variant 1 is kept, but
   // identical to variant 0)
-  const double t_vr_variant[2] = {6 * mm, 6 * mm};
+  const double t_vr_variant[2] = {rib_thickness, rib_thickness};
 
   /// define longitudinal ribs (top/bottom: X, sides: Y) and corner ribs, one
   /// variant per vertical rib thickness (the cell length depends on it)
@@ -742,9 +742,9 @@ TGeoVolume* veto::make_segments() {
   int nx = 2;  // number of Longitudinal ribs on X
   int ny = 3;  // number of Longitudinal ribs on Y
 
-  double wall_thickness = 6 * mm;  // fixed here, ignores innerSupport in yaml
+  double wall_thickness = f_InnerSupportThickness; 
   double lisc_thickness = f_VetoThickness;
-  double rib_thickness = 6 * mm;   // fixed here, ignores rib in yaml
+  double rib_thickness = f_RibThickness;
 
   //******************************** Block1
   //**************************************
