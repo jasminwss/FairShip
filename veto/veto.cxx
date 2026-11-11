@@ -675,80 +675,11 @@ void veto::add_block(TGeoVolumeAssembly* outer_wall,
 TGeoVolume* veto::make_segments() {
   TGeoVolumeAssembly* tTankVol = new TGeoVolumeAssembly("T2");
 
-  Double_t cell_thickness_z0 =
-      800 * mm;  // length of the first cell along z (800mm) 2024 version
-  Double_t cell_thickness_z =
-      820 * mm;  // length of the cell along z (820mm) 2024 version
-
-  TString nameOuterWall = "VetoOuterWall";
-  TGeoVolumeAssembly* outer_wall = new TGeoVolumeAssembly(nameOuterWall);
-
-  TString nameLongitRib = "VetoLongitRib";
-  TGeoVolumeAssembly* longitudinal_rib = new TGeoVolumeAssembly(nameLongitRib);
-
-  TString nameVerticalRib = "VetoVerticalRib";
-  TGeoVolumeAssembly* vertical_rib = new TGeoVolumeAssembly(nameVerticalRib);
-
-  TString nameLiSc = "VetoLiSc";
-  TGeoVolumeAssembly* lisc = new TGeoVolumeAssembly(nameLiSc);
-
-  int nx = 2;  // number of Longitudinal ribs on X
-  int ny = 3;  // number of Longitudinal ribs on Y
-
-  double wall_thickness = f_InnerSupportThickness;
-  double lisc_thickness = f_VetoThickness;
-  double rib_thickness = f_RibThickness;
-
-  //******************************** Block1
-  //**************************************
-  double z1 = 0 * m;
-  double z2 = 800 * mm;
-  double wz = (z2 - z1);
-
-  double z_shift = wz / 2;  // calibration of Z position
-
-  add_block(outer_wall, longitudinal_rib, vertical_rib, lisc, 1, nx, ny, z1, z2,
-            z_shift, cell_thickness_z0, wall_thickness, lisc_thickness,
-            lisc_thickness, rib_thickness);
-
-  //******************************** Block2
-  //**************************************
-
-  z_shift += wz / 2;
-
-  z1 = 800 * mm;
-  z2 = 50.0 * m;
-  wz = (z2 - z1);
-
-  z_shift += wz / 2;
-
-  add_block(outer_wall, longitudinal_rib, vertical_rib, lisc, 2, nx, ny, z1, z2,
-            z_shift, cell_thickness_z, wall_thickness, lisc_thickness,
-            lisc_thickness, rib_thickness);
-
-  double zi = z2;
-
-  TString nameVR("");
-  nameVR.Form("VetoVerticalRib_z%d", static_cast<int>(zi));
-  TGeoVolume* TVR = GeoTrapezoidHollow(
-      nameVR, lisc_thickness, rib_thickness, wx(zi) + 2 * wall_thickness,
-      wx(zi + rib_thickness) + 2 * wall_thickness, wy(zi) + 2 * wall_thickness,
-      wy(zi + rib_thickness) + 2 * wall_thickness, 15, supportMedIn);
-  double tZ = z_shift - wz / 2 + zi - z1 + rib_thickness / 2;
-
-  vertical_rib->AddNode(TVR, 0, new TGeoTranslation(0, 0, tZ));
-
-  /// inner vessel: decay medium nested in PVC balloon nested in support wall.
-  /// The vessel is solid; the liner leaves a wall of thickness wall_thickness,
-  /// the decay medium leaves a balloon skin of thickness f_he_balloon_thickness
-  /// on all sides (the front/back skin doubles as the balloon lids).
+  /// no SBT: no outer wall, ribs, LiSc cells or inner support wall.
+  /// Only the decay medium (helium) inside the He balloon.
   const double z_start = 0 * m;
   const double z_end = 50 * m;
   const double balloon_thickness = f_he_balloon_thickness;
-  TGeoVolume* vessel = make_geo_trapezoid(
-      "VetoInnerWall", z_end - z_start, wx(z_start) + 2 * wall_thickness,
-      wx(z_end) + 2 * wall_thickness, wy(z_start) + 2 * wall_thickness,
-      wy(z_end) + 2 * wall_thickness, 15, supportMedIn);
   TGeoVolume* decay_medium = nullptr;
   if (balloon_thickness > 0) {
     TGeoVolume* liner =
@@ -762,24 +693,20 @@ TGeoVolume* veto::make_segments() {
         wy(z_end - balloon_thickness) - 2 * balloon_thickness, 1,
         decayVolumeMed);
     liner->AddNode(decay_medium, 0);
-    vessel->AddNode(liner, 0);
+    tTankVol->AddNode(liner, 0,
+                      new TGeoTranslation(0, 0, (z_start + z_end) / 2));
   } else {
     decay_medium = make_geo_trapezoid("decay_medium", z_end - z_start,
                                       wx(z_start), wx(z_end), wy(z_start),
                                       wy(z_end), 1, decayVolumeMed);
-    vessel->AddNode(decay_medium, 0);
+    tTankVol->AddNode(decay_medium, 0,
+                      new TGeoTranslation(0, 0, (z_start + z_end) / 2));
   }
   decay_medium->SetVisibility(kFALSE);
-  tTankVol->AddNode(vessel, 0,
-                    new TGeoTranslation(0, 0, (z_start + z_end) / 2));
-
-  tTankVol->AddNode(outer_wall, 0, new TGeoTranslation(0, 0, 0));
-  tTankVol->AddNode(vertical_rib, 0, new TGeoTranslation(0, 0, 0));
-  tTankVol->AddNode(longitudinal_rib, 0, new TGeoTranslation(0, 0, 0));
-  tTankVol->AddNode(lisc, 0, new TGeoTranslation(0, 0, 0));
 
   return tTankVol;
 }
+
 
 // -------------------------------------------------------------------------
 /**
